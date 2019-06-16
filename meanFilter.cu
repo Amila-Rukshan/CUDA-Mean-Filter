@@ -4,8 +4,7 @@
 #include <cuda_profiler_api.h>
 #include <tuple>
 #include <iostream>
-
-#define BLOCK_SIZE 64 
+#include <string.h>
 
 // round double to int
 int my_round(double d)
@@ -14,10 +13,9 @@ int my_round(double d)
     return y;
 }
 
-void meanFilter_h(unsigned char* raw_image_matrix, int image_width, int image_height, int window_size)
+void meanFilter_h(unsigned char* raw_image_matrix,unsigned char* filtered_image_data,int image_width, int image_height, int window_size)
 {
     int size = 3 * image_width * image_height;
-    unsigned char* filtered_image_data = new unsigned char[size];
     int half_window = (window_size-window_size % 2)/2;
     for(int i = 0; i < image_height; i += 1){
         for(int j = 0; j < image_width; j += 1){
@@ -43,8 +41,15 @@ void meanFilter_h(unsigned char* raw_image_matrix, int image_width, int image_he
             filtered_image_data[k] = first_byte/effective_window_size;
             filtered_image_data[k+1] = second_byte/effective_window_size;
             filtered_image_data[k+2] =third_byte/effective_window_size;
+
+            
         }
     }
+    // printf("Result from CPU\n");
+    // for(int z = 0; z < size; z += 3)
+    // {
+    //     printf("(%d, %d, %d)\n",filtered_image_data[z], filtered_image_data[z+1], filtered_image_data[z+2]);
+    // }
 }
 
 __global__ void meanFilter_d(unsigned char* raw_image_matrix, unsigned char* filtered_image_data, int image_width, int image_height, int half_window)
@@ -100,25 +105,30 @@ int main(int argc,char **argv)
     int size = 3 * width * abs(height);
     unsigned char* data = new unsigned char[size]; // allocate 3 bytes per pixel
     unsigned char* result_image_data_d;
-    unsigned char* result_image_data_d2 = new unsigned char[size];
+    unsigned char* result_image_data_h = new unsigned char[size];
+    unsigned char* result_image_data_h1 = new unsigned char[size];
+
     unsigned char* image_data_d;
 
     fread(data, sizeof(unsigned char), size, f); // read the rest of the data at once
     fclose(f);
     //******reading the bitmap to char array******
-    int GRID_SIZE = width/BLOCK_SIZE;
 
-    printf("       GRID_SIZE: (%d, %d)\n", GRID_SIZE, GRID_SIZE);
-    printf("      BLOCK_SIZE: (%d, %d)\n", BLOCK_SIZE, BLOCK_SIZE);
+    // dim3 dimGrid (GRID_SIZE, GRID_SIZE);
+    // dim3 dimBlock (BLOCK_SIZE, BLOCK_SIZE);
+    int block_size = 32;
+    int grid_size = width/block_size;
+    dim3 dimBlock(block_size, block_size, 1);
+    dim3 dimGrid(grid_size, grid_size, 1);
 
-    dim3 dimGrid (GRID_SIZE, GRID_SIZE);
-    dim3 dimBlock (BLOCK_SIZE, BLOCK_SIZE);
+    printf("       GRID_SIZE: (%d, %d)\n", grid_size, grid_size);
+    printf("      BLOCK_SIZE: (%d, %d)\n", block_size, block_size);
     
     printf("Allocating device memory on host..\n");
-    cudaMalloc((void **)&image_data_d,size*sizeof(char));
-    cudaMalloc((void **)&result_image_data_d,size*sizeof(char));
+    cudaMalloc((void **)&image_data_d,size*sizeof(unsigned char));
+    cudaMalloc((void **)&result_image_data_d,size*sizeof(unsigned char));
     printf("Copying to device..\n");
-    cudaMemcpy(image_data_d,data,size*sizeof(char),cudaMemcpyHostToDevice);
+    cudaMemcpy(image_data_d,data,size*sizeof(unsigned char),cudaMemcpyHostToDevice);
     int half_window = (window_size-window_size % 2)/2;
 
     // call to GPU code
@@ -126,20 +136,31 @@ int main(int argc,char **argv)
     printf("Doing GPU Mean Filter...\n");
     meanFilter_d <<< dimGrid, dimBlock >>> (image_data_d, result_image_data_d, width, height, half_window);
     cudaThreadSynchronize();
+
+    cudaError_t error = cudaGetLastError();
+    if(error!=cudaSuccess)
+    {
+        fprintf(stderr,"ERROR: %s\n", cudaGetErrorString(error) );
+        exit(-1);
+    }
     clock_t end_d = clock();
-
-    cudaMemcpy(result_image_data_d2,result_image_data_d,size*sizeof(char),cudaMemcpyDeviceToHost);
-
-    // for(int i = 0; i < size; i += 3)
-    // {
-    //     printf("(%d, %d, %d)\n",result_image_data_d2[i], result_image_data_d2[i+1], result_image_data_d2[i+2]);
-    // }
 
     // call to CPU code
     clock_t start_h = clock();
     printf("Doing CPU Mean Filter...\n");
-    meanFilter_h(data, width, height, window_size);
+    meanFilter_h(data, result_image_data_h1, width, height, window_size);
     clock_t end_h = clock();
+
+    printf("Result from GPU\n");
+    cudaMemcpy(result_image_data_h,result_image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
+    // cudaMemcpy(data_h,image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
+
+    // for(int i = 0; i < size; i += 3)
+    // {
+    //     printf("(%d, %d, %d)\n",result_image_data_h[i], result_image_data_h[i+1], result_image_data_h[i+2]);
+    // }
+
+    printf("compare results code : %d\n",memcmp(result_image_data_h, result_image_data_h1, size*sizeof(unsigned char)));
 
     double time_h = (double)(end_h-start_h)/CLOCKS_PER_SEC;
     double time_d = (double)(end_d-start_d)/CLOCKS_PER_SEC;

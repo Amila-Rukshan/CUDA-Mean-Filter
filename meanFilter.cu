@@ -166,7 +166,8 @@ int main(int argc,char **argv)
         time_h += (double)(end_h-start_h)/CLOCKS_PER_SEC;
         time_d += (double)(end_d-start_d)/CLOCKS_PER_SEC;
 
-
+        cudaFree(image_data_d);
+        cudaFree(result_image_data_d);
     }
     // cudaMemcpy(data_h,image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
 
@@ -179,8 +180,6 @@ int main(int argc,char **argv)
     printf("    CPU Time: %f\n",(time_h/sample_rounds));
     printf("CPU/GPU time: %f\n",(time_h/time_d));
 
-    cudaFree(image_data_d);
-    cudaFree(result_image_data_d);
     
     return 0;
 }

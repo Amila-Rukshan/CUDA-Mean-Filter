@@ -6,6 +6,11 @@
 #include <iostream>
 #include <string.h>
 
+double time_h = 0;
+double time_d = 0;
+
+int sample_rounds = 10;
+
 // round double to int
 int my_round(double d)
 {
@@ -15,7 +20,7 @@ int my_round(double d)
 
 void meanFilter_h(unsigned char* raw_image_matrix,unsigned char* filtered_image_data,int image_width, int image_height, int window_size)
 {
-    int size = 3 * image_width * image_height;
+    // int size = 3 * image_width * image_height;
     int half_window = (window_size-window_size % 2)/2;
     for(int i = 0; i < image_height; i += 1){
         for(int j = 0; j < image_width; j += 1){
@@ -124,35 +129,45 @@ int main(int argc,char **argv)
     printf("       GRID_SIZE: (%d, %d)\n", grid_size, grid_size);
     printf("      BLOCK_SIZE: (%d, %d)\n", block_size, block_size);
     
-    printf("Allocating device memory on host..\n");
-    cudaMalloc((void **)&image_data_d,size*sizeof(unsigned char));
-    cudaMalloc((void **)&result_image_data_d,size*sizeof(unsigned char));
-    printf("Copying to device..\n");
-    cudaMemcpy(image_data_d,data,size*sizeof(unsigned char),cudaMemcpyHostToDevice);
-    int half_window = (window_size-window_size % 2)/2;
-
-    // call to GPU code
-    clock_t start_d=clock();
-    printf("Doing GPU Mean Filter...\n");
-    meanFilter_d <<< dimGrid, dimBlock >>> (image_data_d, result_image_data_d, width, height, half_window);
-    cudaThreadSynchronize();
-
-    cudaError_t error = cudaGetLastError();
-    if(error!=cudaSuccess)
+    for(int _ = 0; _ < sample_rounds; _ += 1)
     {
-        fprintf(stderr,"ERROR: %s\n", cudaGetErrorString(error) );
-        exit(-1);
+        printf("Allocating device memory on host..\n");
+        cudaMalloc((void **)&image_data_d,size*sizeof(unsigned char));
+        cudaMalloc((void **)&result_image_data_d,size*sizeof(unsigned char));
+        printf("Copying to device..\n");
+        cudaMemcpy(image_data_d,data,size*sizeof(unsigned char),cudaMemcpyHostToDevice);
+        int half_window = (window_size-window_size % 2)/2;
+
+        // call to GPU code
+        clock_t start_d=clock();
+        printf("Doing GPU Mean Filter...\n");
+        meanFilter_d <<< dimGrid, dimBlock >>> (image_data_d, result_image_data_d, width, height, half_window);
+        cudaThreadSynchronize();
+
+        cudaError_t error = cudaGetLastError();
+        if(error!=cudaSuccess)
+        {
+            fprintf(stderr,"ERROR: %s\n", cudaGetErrorString(error) );
+            exit(-1);
+        }
+        clock_t end_d = clock();
+
+        // call to CPU code
+        clock_t start_h = clock();
+        printf("Doing CPU Mean Filter...\n");
+        meanFilter_h(data, result_image_data_h1, width, height, window_size);
+        clock_t end_h = clock();
+
+        printf("Result from GPU\n");
+        cudaMemcpy(result_image_data_h,result_image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
+
+        printf("compare results code : %d\n",memcmp(result_image_data_h, result_image_data_h1, size*sizeof(unsigned char)));
+
+        time_h += (double)(end_h-start_h)/CLOCKS_PER_SEC;
+        time_d += (double)(end_d-start_d)/CLOCKS_PER_SEC;
+
+
     }
-    clock_t end_d = clock();
-
-    // call to CPU code
-    clock_t start_h = clock();
-    printf("Doing CPU Mean Filter...\n");
-    meanFilter_h(data, result_image_data_h1, width, height, window_size);
-    clock_t end_h = clock();
-
-    printf("Result from GPU\n");
-    cudaMemcpy(result_image_data_h,result_image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
     // cudaMemcpy(data_h,image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
 
     // for(int i = 0; i < size; i += 3)
@@ -160,12 +175,10 @@ int main(int argc,char **argv)
     //     printf("(%d, %d, %d)\n",result_image_data_h[i], result_image_data_h[i+1], result_image_data_h[i+2]);
     // }
 
-    printf("compare results code : %d\n",memcmp(result_image_data_h, result_image_data_h1, size*sizeof(unsigned char)));
+    printf("    GPU Time: %f\n",(time_d/sample_rounds));
+    printf("    CPU Time: %f\n",(time_h/sample_rounds));
+    printf("CPU/GPU time: %f\n",(time_h/time_d));
 
-    double time_h = (double)(end_h-start_h)/CLOCKS_PER_SEC;
-    double time_d = (double)(end_d-start_d)/CLOCKS_PER_SEC;
-    
-    printf("GPU Time: %f CPU Time: %f\n",time_d ,time_h);
     cudaFree(image_data_d);
     cudaFree(result_image_data_d);
     

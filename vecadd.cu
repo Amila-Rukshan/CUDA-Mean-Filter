@@ -5,12 +5,19 @@
 #include <cuda.h>
 #include <string.h>
 
+/*
+ * compile: nvcc .\vecadd.cu -o vecadd 
+ * run: ./vecadd <int: size of the vector> <int: block size>
+ */
+
 int *a, *b;  // host data
 int *c, *c2;  // results
 
 int sample_size = 10;
 double time_d = 0;
 double time_h = 0;
+
+int n; // size of the vector
 
 __global__ void vecAdd(int *A,int *B,int *C,int N)
 {
@@ -28,7 +35,7 @@ void vecAdd_h(int *A1,int *B1, int *C1, int N)
 int main(int argc,char **argv)
 {
    printf("Begin \n");
-   int n=100000000;
+   n = strtol(argv[1], NULL, 10);
    int nBytes = n*sizeof(int);
    int block_size, block_no;
    a = (int *)malloc(nBytes);
@@ -36,7 +43,7 @@ int main(int argc,char **argv)
    c = (int *)malloc(nBytes);
    c2 = (int *)malloc(nBytes);
    int *a_d,*b_d,*c_d;
-   block_size=100;
+   block_size = strtol(argv[2], NULL, 10);;
    block_no = ceil(n/block_size);
    dim3 dimBlock(block_size,1,1);
    dim3 dimGrid(block_no,1,1);

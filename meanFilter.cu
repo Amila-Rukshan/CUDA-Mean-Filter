@@ -5,15 +5,15 @@
 #include <tuple>
 #include <iostream>
 #include <string.h>
-#include <chrono>
+// #include <chrono>
 
 /*
  * compile: nvcc meanFilter.cu -o meanFilter
  * run: ./meanFilter <string: image.bmp path> <int: size of the square filter>
  */
 
-long time_h = 0;
-long time_d = 0;
+double time_h = 0;
+double time_d = 0;
 
 int sample_rounds = 10;
 
@@ -145,7 +145,7 @@ int main(int argc,char **argv)
         printf("half window: %d\n", half_window);
 
         // call to GPU code
-        std::chrono::steady_clock::time_point start_d = std::chrono::high_resolution_clock::now();
+        clock_t start_d = clock();
         printf("Doing GPU Mean Filter...\n");
         meanFilter_d <<< dimGrid, dimBlock >>> (image_data_d, result_image_data_d, width, height, half_window);
         cudaThreadSynchronize();
@@ -156,21 +156,21 @@ int main(int argc,char **argv)
             fprintf(stderr,"ERROR: %s\n", cudaGetErrorString(error) );
             exit(-1);
         }
-        std::chrono::steady_clock::time_point end_d = std::chrono::high_resolution_clock::now();
+        clock_t end_d = clock();
 
         // call to CPU code
-        std::chrono::steady_clock::time_point start_h = std::chrono::high_resolution_clock::now();
+        clock_t start_h = clock();
         printf("Doing CPU Mean Filter...\n");
         meanFilter_h(data, result_image_data_h1, width, height, half_window);
-        std::chrono::steady_clock::time_point end_h = std::chrono::high_resolution_clock::now();
+        clock_t end_h = clock();
 
         printf("Result from GPU\n");
         cudaMemcpy(result_image_data_h,result_image_data_d,size*sizeof(unsigned char),cudaMemcpyDeviceToHost);
 
         printf("compare results code : %d\n",memcmp(result_image_data_h, result_image_data_h1, size*sizeof(unsigned char)));
 
-        time_h += std::chrono::duration_cast<std::chrono::microseconds>(end_h-start_h).count(); 
-        time_d += std::chrono::duration_cast<std::chrono::microseconds>(end_d-start_d).count();
+        time_h += (double)(end_h-start_h)/CLOCKS_PER_SEC; 
+        time_d += (double)(end_d-start_d)/CLOCKS_PER_SEC;
 
         cudaFree(image_data_d);
         cudaFree(result_image_data_d);
@@ -182,9 +182,9 @@ int main(int argc,char **argv)
     //     printf("(%d, %d, %d)\n",result_image_data_h[i], result_image_data_h[i+1], result_image_data_h[i+2]);
     // }
 
-    printf("    GPU Time: %d microseconds\n",(time_d/sample_rounds));
-    printf("    CPU Time: %d microseconds\n",(time_h/sample_rounds));
-    printf("CPU/GPU time: %f \n",((float)time_h/time_d));
+    printf("    GPU Time: %f s\n",(time_d/sample_rounds));
+    printf("    CPU Time: %f s\n",(time_h/sample_rounds));
+    printf("CPU/GPU time: %f \n",((double)time_h/time_d));
 
     
     return 0;

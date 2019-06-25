@@ -55,6 +55,8 @@ void meanFilter_h(unsigned char* raw_image_matrix,unsigned char* filtered_image_
             
         }
     }
+
+    // int size = image_width*image_height*3;
     // printf("Result from CPU\n");
     // for(int z = 0; z < size; z += 3)
     // {
@@ -68,7 +70,7 @@ __global__ void meanFilter_d(unsigned char* raw_image_matrix, unsigned char* fil
     int i = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < image_height && j < image_width){
-        int k = 3*(i*image_height+j);
+        int k = 3*(i*image_width+j);
         int top, bottom, left, right; 
         if(i-half_window >= 0){top = i-half_window;}else{top = 0;}// top limit
         if(i+half_window <= image_height-1){bottom = i+half_window;}else{bottom = image_height-1;}// bottom limit
@@ -80,7 +82,7 @@ __global__ void meanFilter_d(unsigned char* raw_image_matrix, unsigned char* fil
         // move inside the window
         for(int x = top; x <= bottom; x++){
             for(int y = left; y <= right; y++){
-                int pos = 3*(x*image_height + y); // three bytes
+                int pos = 3*(x*image_width + y); // three bytes
                 first_byte += raw_image_matrix[pos];
                 second_byte += raw_image_matrix[pos+1];
                 third_byte += raw_image_matrix[pos+2];

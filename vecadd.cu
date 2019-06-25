@@ -43,14 +43,14 @@ int main(int argc,char **argv)
    c = (int *)malloc(nBytes);
    c2 = (int *)malloc(nBytes);
    int *a_d,*b_d,*c_d;
-   block_size = strtol(argv[2], NULL, 10);;
+   block_size = strtol(argv[2], NULL, 10);
    block_no = ceil(n/block_size);
    dim3 dimBlock(block_size,1,1);
    dim3 dimGrid(block_no,1,1);
 
    for(int i = 0; i < n; i++ ) {
-        a[i] = 1;
-        b[i] = 1;
+      a[i] = sin(i)*sin(i);
+      b[i] = cos(i)*cos(i);
    }
 
    for(int _ = 0; _ < sample_size; _ += 1)
@@ -65,7 +65,7 @@ int main(int argc,char **argv)
       cudaMemcpy(b_d,b,n*sizeof(int),cudaMemcpyHostToDevice);
       clock_t start_d=clock();
       printf("Doing GPU Vector add\n");
-      vecAdd<<<block_no,block_size>>>(a_d,b_d,c_d,n);
+      vecAdd<<<dimGrid, dimBlock>>>(a_d,b_d,c_d,n);
       cudaThreadSynchronize();
       cudaError_t error = cudaGetLastError();
       if(error!=cudaSuccess)
